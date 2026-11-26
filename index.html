@@ -290,24 +290,32 @@
     let previewRows = [];
 
     (function init() {
-      const today = formatDateLocal(new Date());
-      ["startDate", "endDate", "fastStartDate", "fastEndDate"].forEach(id => {
-        document.getElementById(id).value = today;
-      });
-      const savedUrl = localStorage.getItem("pgrs_gas_url") || DEFAULT_GAS_URL;
-      document.getElementById("gasUrlInput").value = savedUrl;
+      try {
+        const today = formatDateLocal(new Date());
+        ["startDate", "endDate", "fastStartDate", "fastEndDate"].forEach(id => {
+          document.getElementById(id).value = today;
+        });
 
-      const savedCut = JSON.parse(localStorage.getItem("pgrs_cutoffs") || "null");
-      if (savedCut) {
-        document.getElementById("cutPagi").value = savedCut.pagi;
-        document.getElementById("cutSelPagi").value = savedCut.sel_pagi;
-        document.getElementById("cutSiang").value = savedCut.siang;
-        document.getElementById("cutSelSore").value = savedCut.sel_sore;
-        document.getElementById("cutMalam").value = savedCut.malam;
+        const storedUrl = localStorage.getItem("pgrs_gas_url") || "";
+        const activeUrl = DEFAULT_GAS_URL || storedUrl;
+        document.getElementById("gasUrlInput").value = activeUrl;
+
+        try {
+          const savedCut = JSON.parse(localStorage.getItem("pgrs_cutoffs") || "null");
+          if (savedCut) {
+            document.getElementById("cutPagi").value = savedCut.pagi || "07:30";
+            document.getElementById("cutSelPagi").value = savedCut.sel_pagi || "10:00";
+            document.getElementById("cutSiang").value = savedCut.siang || "12:30";
+            document.getElementById("cutSelSore").value = savedCut.sel_sore || "15:30";
+            document.getElementById("cutMalam").value = savedCut.malam || "18:30";
+          }
+        } catch (e) {}
+
+        if (activeUrl) loadDatabase();
+        else toggleSettings();
+      } catch (initErr) {
+        alert("Error init: " + initErr.message);
       }
-
-      if (savedUrl) loadDatabase();
-      else toggleSettings();
     })();
 
     function escapeHtml(str) {
@@ -336,6 +344,111 @@
       }));
       toggleSettings();
       if (url) loadDatabase();
+    }
+
+    async function loadDatabase() {
+      const url = document.getElementById("gasUrlInput").value.trim();
+      if (!url) {
+        toggleSettings();
+        return alert("Masukkan URL Web App Google Apps Script terlebih dahulu.");
+      }
+
+      const badge = document.getElementById("dbStatusBadge");
+      const btn = document.getElementById("btnLoadDb");
+      const listBox = document.getElementById("adimeListContainer");
+
+      badge.textContent = "Memuat ADIME...";
+      badge.className = "px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-700";
+      btn.disabled = true;
+      btn.textContent = "⏳ Sedang Menarik...";
+      btn.classList.add("opacity-60", "cursor-wait");
+
+      const sep = url.includes("?") ? "&" : "?";
+      const targetUrl = url + sep + "action=diet_fast_init";
+      listBox.innerHTML = `<div class="p-4 m-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1">
+        <div class="font-bold">⏳ Sedang menarik data dari Google Sheets...</div>
+        <div class="text-[10px] text-amber-700 break-all">Target: ${escapeHtml(targetUrl)}</div>
+      </div>`;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      try {
+        const resp = await fetch(targetUrl, {
+          method: "GET",
+          redirect: "follow",
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const rawText = await resp.text();
+        let json;
+        try {
+          json = JSON.parse(rawText);
+        } catch (parseErr) {
+          throw new Error("Respon bukan JSON (pastikan Deploy Apps Script aksesnya 'Anyone' dan sudah 'New version'). Cuplikan: " + rawText.slice(0, 120));
+        }
+
+        if (json.status !== "success") throw new Error(json.message || "Gagal mengambil data");
+
+        dbData.pasien = json.data.pasien || [];
+        dbData.adime = (json.data.adime || []).slice().reverse();
+        dbData.users = json.data.users || [];
+        dbData.diet = json.data.diet || [];
+
+        pasienMap = {};
+        dbData.pasien.forEach(p => {
+          const raw = String(p.no_rm || p.norm || "").trim().toUpperCase();
+          if (raw) {
+            pasienMap[raw] = p;
+            pasienMap[cleanRmKey(raw)] = p;
+          }
+        });
+
+        existingDietMap = {};
+        dietCountByRm = {};
+
+        if (Array.isArray(json.data.diet_headers) && json.data.diet_headers.length > 0) {
+          detectedDietHeaders = json.data.diet_headers;
+        } else if (dbData.diet.length > 0) {
+          detectedDietHeaders = Object.keys(dbData.diet[0]);
+        }
+
+        dbData.diet.forEach(d => {
+          const rm = cleanRmKey(d.no_rm || d.norm || "");
+          const tgl = String(d.tanggal || "").slice(0, 10);
+          if (rm && tgl) existingDietMap[rm + "_" + tgl] = d.id;
+          if (rm) dietCountByRm[rm] = (dietCountByRm[rm] || 0) + 1;
+        });
+
+        const bangsalSet = new Set();
+        dbData.adime.forEach(a => { if (a.bangsal) bangsalSet.add(a.bangsal); });
+        document.getElementById("filterAdimeBangsal").innerHTML = `<option value="">Semua Bangsal</option>` +
+          Array.from(bangsalSet).sort().map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join("");
+
+        document.getElementById("petugasDatalist").innerHTML =
+          dbData.users.map(u => `<option value="${escapeHtml(u.nama || u.username || '')}"></option>`).join("");
+
+        badge.textContent = `Terhubung (${dbData.adime.length} ADIME, ${dbData.diet.length} Diet)`;
+        badge.className = "px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700";
+
+        renderAdimeList();
+      } catch (err) {
+        clearTimeout(timeoutId);
+        const msg = (err.name === "AbortError")
+          ? "Timeout > 30 detik. Kemungkinan Code.gs belum di-deploy 'New version' dengan diet_fast_init."
+          : err.message;
+        badge.textContent = "Gagal terhubung";
+        badge.className = "px-2.5 py-0.5 text-xs font-semibold rounded-full bg-rose-100 text-rose-700";
+        listBox.innerHTML = `<div class="p-4 m-2 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 space-y-1">
+          <div class="font-bold">❌ Gagal Menarik Data</div>
+          <div>${escapeHtml(msg)}</div>
+        </div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "🔄 Tarik Data ADIME";
+        btn.classList.remove("opacity-60", "cursor-wait");
+      }
     }
     async function loadDatabase() {
       const url = document.getElementById("gasUrlInput").value.trim();
