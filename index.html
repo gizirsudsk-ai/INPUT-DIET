@@ -824,9 +824,8 @@
         alert("❌ Gagal menyimpan: " + (errMsg || "Tidak terverifikasi di database"));
       }
 
-      btn.disabled = false;
+     btn.disabled = false;
       btn.innerHTML = `💾 Simpan ke Google Sheets (<span id="countToSave">${previewRows.filter(r => r._include).length}</span> Baris)`;
-     }
     }
   </script>
 </body>
