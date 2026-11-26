@@ -774,28 +774,59 @@
       btn.disabled = true;
       btn.textContent = "⏳ Mengirim ke Google Sheets...";
 
+      let isSaved = false;
+      let errMsg = "";
+
       try {
         const resp = await fetch(url, {
           method: "POST",
+          redirect: "follow",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify({ type: "diet", action: "save", data: rowsToSave })
         });
 
-        const resJson = await resp.json();
-        if (resJson.status === "success") {
-          alert(`✅ Berhasil menyimpan ${rowsToSave.length} baris diet ke Database Utama!`);
-          await loadDatabase();
-          previewRows = [];
-          renderPreviewTable();
-        } else {
-          throw new Error(resJson.message || "Gagal menyimpan");
+        const rawText = await resp.text();
+        try {
+          const resJson = JSON.parse(rawText);
+          if (resJson.status === "success") {
+            isSaved = true;
+          } else {
+            errMsg = resJson.message || "Respon server bukan success";
+          }
+        } catch (parseErr) {
+          // Jika GAS membalas HTML redirect tapi status HTTP OK, cek ulang database di bawah
+          errMsg = "Respon redirect tidak terbaca JSON";
         }
       } catch (err) {
-        alert("❌ Gagal menyimpan: " + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = `💾 Simpan ke Google Sheets (<span id="countToSave">${previewRows.filter(r => r._include).length}</span> Baris)`;
+        errMsg = err.message;
       }
+
+      // VERIFIKASI OTOMATIS: Jika kena blokir redirect CORS GAS, cek apakah ID sudah masuk di sheet diet
+      if (!isSaved) {
+        btn.textContent = "🔍 Memverifikasi ke database...";
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        await loadDatabase();
+
+        const targetIds = new Set(rowsToSave.map(r => String(r.id).trim().toUpperCase()));
+        const foundInDb = dbData.diet.some(d => targetIds.has(String(d.id || "").trim().toUpperCase()));
+        if (foundInDb) {
+          isSaved = true;
+        }
+      } else {
+        await loadDatabase();
+      }
+
+      if (isSaved) {
+        alert(`✅ Berhasil menyimpan ${rowsToSave.length} baris diet ke Database Utama!`);
+        previewRows = [];
+        renderPreviewTable();
+      } else {
+        alert("❌ Gagal menyimpan: " + (errMsg || "Tidak terverifikasi di database"));
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = `💾 Simpan ke Google Sheets (<span id="countToSave">${previewRows.filter(r => r._include).length}</span> Baris)`;
+     }
     }
   </script>
 </body>
