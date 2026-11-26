@@ -337,7 +337,6 @@
       toggleSettings();
       if (url) loadDatabase();
     }
-
     async function loadDatabase() {
       const url = document.getElementById("gasUrlInput").value.trim();
       if (!url) return alert("Masukkan URL Web App Google Apps Script terlebih dahulu.");
@@ -349,7 +348,9 @@
       btn.disabled = true;
 
       try {
-        const resp = await fetch(url);
+        // 1. Memanggil jalur cepat diet_fast_init di Code.gs
+        const sep = url.includes("?") ? "&" : "?";
+        const resp = await fetch(url + sep + "action=diet_fast_init");
         const json = await resp.json();
         if (json.status !== "success") throw new Error(json.message || "Gagal mengambil data");
 
@@ -369,7 +370,14 @@
 
         existingDietMap = {};
         dietCountByRm = {};
-        if (dbData.diet.length > 0) detectedDietHeaders = Object.keys(dbData.diet[0]);
+
+        // 2. Membaca nama kolom asli sheet diet dari diet_headers
+        if (Array.isArray(json.data.diet_headers) && json.data.diet_headers.length > 0) {
+          detectedDietHeaders = json.data.diet_headers;
+        } else if (dbData.diet.length > 0) {
+          detectedDietHeaders = Object.keys(dbData.diet[0]);
+        }
+
         dbData.diet.forEach(d => {
           const rm = cleanRmKey(d.no_rm || d.norm || "");
           const tgl = String(d.tanggal || "").slice(0, 10);
