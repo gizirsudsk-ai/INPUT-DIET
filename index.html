@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PGRS ADIME → Diet Fast Entry</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #f1f5f9; }
+  </style>
+</head>
+<body class="text-slate-800">
+  <div class="max-w-7xl mx-auto p-4 md:p-6 space-y-5">
+
+    <!-- HEADER -->
+    <header class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-indigo-100 text-indigo-700">ADIME → DIET ENGINE</span>
+          <span id="dbStatusBadge" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-100 text-slate-600">Belum terhubung</span>
+        </div>
+        <h1 class="text-xl md:text-2xl font-bold text-slate-900 mt-1">Input Diet Cepat Berbasis Data ADIME</h1>
+        <p class="text-xs md:text-sm text-slate-500">Pilih catatan ADIME → Kalori, Protein & Diet terisi otomatis → Generate jam masuk–pulang & puasa.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button onclick="toggleSettings()" class="px-3.5 py-2 text-sm font-medium rounded-xl border border-slate-300 bg-white hover:bg-slate-50">
+          ⚙️ URL & Cut-Off
+        </button>
+        <button onclick="loadDatabase()" id="btnLoadDb" class="px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">
+          🔄 Tarik Data ADIME
+        </button>
+      </div>
+    </header>
+
+    <!-- PANEL PENGATURAN -->
+    <section id="settingsPanel" class="hidden bg-white rounded-2xl shadow-sm border border-amber-200 p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-bold text-slate-800">Pengaturan Koneksi Database & Jam Cut-Off RS</h2>
+        <button onclick="toggleSettings()" class="text-sm text-slate-500 hover:text-slate-800">Tutup ✕</button>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">URL Web App Google Apps Script (`.../exec`)</label>
+        <input id="gasUrlInput" type="url" placeholder="https://script.google.com/macros/s/AKfy.../exec"
+          class="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-indigo-500" />
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1">Cut-Off Pagi</label><input id="cutPagi" type="time" value="07:30" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300" /></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1">Cut-Off Sel. Pagi</label><input id="cutSelPagi" type="time" value="10:00" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300" /></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1">Cut-Off Siang</label><input id="cutSiang" type="time" value="12:30" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300" /></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1">Cut-Off Sel. Sore</label><input id="cutSelSore" type="time" value="15:30" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300" /></div>
+        <div><label class="block text-xs font-semibold text-slate-600 mb-1">Cut-Off Malam</label><input id="cutMalam" type="time" value="18:30" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300" /></div>
+      </div>
+      <div class="flex justify-end">
+        <button onclick="saveSettings()" class="px-4 py-2 text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800">Simpan Pengaturan</button>
+      </div>
+    </section>
+
+    <!-- KONTEN UTAMA -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+      <!-- KIRI: DAFTAR ADIME -->
+      <aside class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col h-[680px]">
+        <div class="space-y-2.5 pb-3 border-b">
+          <div class="flex items-center justify-between">
+            <h2 class="font-bold text-slate-800 text-sm">1. Daftar Catatan ADIME</h2>
+            <span id="adimeCountLabel" class="text-xs text-slate-500">0 data</span>
+          </div>
+          <input id="filterAdimeSearch" type="text" oninput="renderAdimeList()" placeholder="Cari No. RM / Nama / Diet / Bangsal..."
+            class="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 outline-none focus:ring-2 focus:ring-indigo-500" />
+          <div class="grid grid-cols-2 gap-2">
+            <select id="filterAdimeBangsal" onchange="renderAdimeList()" class="px-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-white">
+              <option value="">Semua Bangsal</option>
+            </select>
+            <input id="filterAdimeDate" type="date" onchange="renderAdimeList()" class="px-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-white" />
+          </div>
+          <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+            <input id="filterOnlyNoDiet" type="checkbox" onchange="renderAdimeList()" class="rounded text-indigo-600" />
+            <span>Hanya tampilkan yang belum ada di sheet `diet`</span>
+          </label>
+        </div>
+
+        <div id="adimeListContainer" class="flex-1 overflow-y-auto divide-y divide-slate-100 mt-2 pr-1">
+          <div class="p-6 text-center text-xs text-slate-400">Klik "Tarik Data ADIME" di kanan atas untuk memuat data.</div>
+        </div>
+      </aside>
+
+      <!-- KANAN: REFERENSI ADIME & FORM GENERATE -->
+      <main class="lg:col-span-8 space-y-5">
+
+        <!-- KARTU REFERENSI ADIME TERPILIH -->
+        <section class="bg-white rounded-2xl shadow-sm border border-indigo-200 p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+            <div>
+              <span class="text-[11px] font-bold uppercase text-indigo-600">Referensi ADIME Terpilih</span>
+              <h3 id="refTitle" class="font-bold text-slate-900 text-sm">Belum ada ADIME dipilih</h3>
+            </div>
+            <div id="refBadges" class="flex flex-wrap gap-1.5 text-[11px]"></div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 max-h-48 overflow-y-auto">
+              <div class="font-bold text-indigo-900 mb-1">📋 INTERVENSI & KEBUTUHAN GIZI</div>
+              <pre id="refIntervention" class="whitespace-pre-wrap font-sans text-slate-700 leading-relaxed">-</pre>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 max-h-48 overflow-y-auto space-y-2">
+              <div>
+                <div class="font-bold text-slate-700">🩺 DIAGNOSIS GIZI</div>
+                <pre id="refDiagnosis" class="whitespace-pre-wrap font-sans text-slate-600 mt-0.5">-</pre>
+              </div>
+              <div class="border-t pt-1.5">
+                <div class="font-bold text-slate-700">📊 ASSESSMENT</div>
+                <pre id="refAssessment" class="whitespace-pre-wrap font-sans text-slate-600 mt-0.5">-</pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- FORM INPUT DIET -->
+        <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 md:p-5 space-y-4">
+          <h2 class="font-bold text-slate-800 text-sm border-b pb-2">2. Konfirmasi Data Diet & Jam Rawat (Otomatis dari ADIME)</h2>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">No. RM</label>
+              <input id="inNoRm" type="text" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300 bg-slate-50 font-bold" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Bangsal</label>
+              <input id="inBangsal" type="text" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Kelas / Kamar</label>
+              <div class="flex gap-1">
+                <input id="inKelas" type="text" placeholder="Kelas" class="w-3/5 px-2 py-1.5 text-xs rounded-lg border border-slate-300" />
+                <input id="inKamar" type="text" placeholder="Kamar" value="-" class="w-2/5 px-2 py-1.5 text-xs rounded-lg border border-slate-300" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Petugas Gizi</label>
+              <input id="inPetugas" list="petugasDatalist" type="text" class="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300" />
+              <datalist id="petugasDatalist"></datalist>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Bentuk Makanan</label>
+              <select id="inBentuk" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300 font-medium">
+                <option value="Makanan Biasa">Makanan Biasa</option>
+                <option value="Makanan Lunak">Makanan Lunak</option>
+                <option value="Makanan Saring">Makanan Saring</option>
+                <option value="Makanan Cair">Makanan Cair</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">Jenis Diet</label>
+              <input id="inJenis" list="jenisDietList" type="text" value="Diet Biasa / Reguler"
+                class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-slate-300 font-medium" />
+              <datalist id="jenisDietList">
+                <option value="Diet Biasa / Reguler"></option>
+                <option value="Diet TKTP"></option>
+                <option value="Diet Rendah Garam"></option>
+                <option value="Diet Diabetes Melitus"></option>
+                <option value="Diet Lambung"></option>
+                <option value="Diet Dislipidemia"></option>
+              </datalist>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-indigo-700 mb-1">Kalori ADIME (kkal)</label>
+              <input id="inKalori" type="number" value="1800" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-indigo-300 bg-indigo-50/40 font-bold text-indigo-900" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-indigo-700 mb-1">Protein ADIME (g)</label>
+              <input id="inProtein" type="number" value="60" class="w-full px-2.5 py-1.5 text-sm rounded-lg border border-indigo-300 bg-indigo-50/40 font-bold text-indigo-900" />
+            </div>
+          </div>
+
+          <!-- TANGGAL & JAM MASUK / PULANG -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 grid grid-cols-2 gap-2">
+              <div class="col-span-2 text-[11px] font-bold text-emerald-800 uppercase">Mulai Mendapat Makan</div>
+              <div>
+                <label class="block text-[10px] text-emerald-700">Tgl Masuk / ADIME</label>
+                <input id="startDate" type="date" class="w-full px-2 py-1 text-xs rounded-lg border border-emerald-300 bg-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] text-emerald-700">Jam Pertama Makan</label>
+                <input id="startTime" type="time" value="16:00" class="w-full px-2 py-1 text-xs rounded-lg border border-emerald-300 bg-white" />
+              </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-rose-50 border border-rose-200 grid grid-cols-2 gap-2">
+              <div class="col-span-2 text-[11px] font-bold text-rose-800 uppercase">Selesai / Pulang</div>
+              <div>
+                <label class="block text-[10px] text-rose-700">Tgl Pulang / Akhir</label>
+                <input id="endDate" type="date" class="w-full px-2 py-1 text-xs rounded-lg border border-rose-300 bg-white" />
+              </div>
+              <div>
+                <label class="block text-[10px] text-rose-700">Jam Pulang</label>
+                <input id="endTime" type="time" value="20:00" class="w-full px-2 py-1 text-xs rounded-lg border border-rose-300 bg-white" />
+              </div>
+            </div>
+          </div>
+
+          <!-- PENYESUAIAN PUASA -->
+          <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-bold text-amber-900 uppercase">Penyesuaian Puasa</span>
+              <select id="fastingMode" onchange="toggleFastingFields()" class="px-2.5 py-1 text-xs font-medium rounded-lg border border-amber-300 bg-white">
+                <option value="none">Tidak Puasa (Normal)</option>
+                <option value="ramadhan">Puasa Ibadah / Ramadhan (Sahur + Takjil + Malam)</option>
+                <option value="tindakan">Puasa Pre-Op / Tindakan (Rentang Jam)</option>
+                <option value="total">Puasa Total / NPO (Rentang Tanggal)</option>
+              </select>
+            </div>
+            <div id="fastingRangeBox" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div><label class="block text-[10px] text-amber-800">Mulai Tgl</label><input id="fastStartDate" type="date" class="w-full px-2 py-1 text-xs rounded border border-amber-300 bg-white" /></div>
+              <div><label class="block text-[10px] text-amber-800">Mulai Jam</label><input id="fastStartTime" type="time" value="00:00" class="w-full px-2 py-1 text-xs rounded border border-amber-300 bg-white" /></div>
+              <div><label class="block text-[10px] text-amber-800">Selesai Tgl</label><input id="fastEndDate" type="date" class="w-full px-2 py-1 text-xs rounded border border-amber-300 bg-white" /></div>
+              <div><label class="block text-[10px] text-amber-800">Selesai Jam</label><input id="fastEndTime" type="time" value="14:00" class="w-full px-2 py-1 text-xs rounded border border-amber-300 bg-white" /></div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 text-xs text-slate-600">
+              <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                <input id="includeSnacksCheck" type="checkbox" checked class="rounded text-indigo-600" />
+                <span>Sertakan Selingan (Pagi & Sore)</span>
+              </label>
+              <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                <input id="skipExistingCheck" type="checkbox" checked class="rounded text-indigo-600" />
+                <span>Lewati tanggal yang sudah ada di DB</span>
+              </label>
+            </div>
+            <button onclick="generateSchedule()" class="px-5 py-2 text-sm font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 shadow-sm">
+              ⚡ Generate Jadwal Harian
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- PREVIEW TABEL HARIAN -->
+    <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 class="font-bold text-slate-800">3. Preview & Simpan ke Database Utama (`diet`)</h2>
+          <p class="text-xs text-slate-500">Anda masih bisa mengubah centang waktu makan per hari sebelum menekan simpan.</p>
+        </div>
+        <button onclick="submitBatchToDatabase()" id="btnSubmitBatch" disabled
+          class="px-5 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm">
+          💾 Simpan ke Google Sheets (<span id="countToSave">0</span> Baris)
+        </button>
+      </div>
+
+      <div class="overflow-x-auto border rounded-xl">
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-100 text-slate-700 uppercase">
+            <tr>
+              <th class="p-2.5">Tanggal</th>
+              <th class="p-2.5">Diet / Kalori / Pro</th>
+              <th class="p-2.5 text-center">Pagi</th>
+              <th class="p-2.5 text-center">Sel. Pagi</th>
+              <th class="p-2.5 text-center">Siang</th>
+              <th class="p-2.5 text-center">Sel. Sore</th>
+              <th class="p-2.5 text-center">Malam</th>
+              <th class="p-2.5 text-center">Qty U / S</th>
+              <th class="p-2.5">Status DB</th>
+              <th class="p-2.5 text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="previewTableBody" class="divide-y divide-slate-200">
+            <tr><td colspan="10" class="p-6 text-center text-slate-400">Pilih catatan ADIME di sebelah kiri, lalu klik "Generate Jadwal Harian".</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    const DEFAULT_GAS_URL = ""; // Opsional: isi URL Web App GAS Anda di sini
+    let dbData = { pasien: [], adime: [], users: [], diet: [] };
+    let pasienMap = {};
+    let existingDietMap = {};
+    let dietCountByRm = {};
+    let detectedDietHeaders = null;
+    let filteredAdime = [];
+    let selectedAdimeId = null;
+    let previewRows = [];
+
+    (function init() {
+      const today = formatDateLocal(new Date());
+      ["startDate", "endDate", "fastStartDate", "fastEndDate"].forEach(id => {
+        document.getElementById(id).value = today;
+      });
+      const savedUrl = localStorage.getItem("pgrs_gas_url") || DEFAULT_GAS_URL;
+      document.getElementById("gasUrlInput").value = savedUrl;
+
+      const savedCut = JSON.parse(localStorage.getItem("pgrs_cutoffs") || "null");
+      if (savedCut) {
+        document.getElementById("cutPagi").value = savedCut.pagi;
+        document.getElementById("cutSelPagi").value = savedCut.sel_pagi;
+        document.getElementById("cutSiang").value = savedCut.siang;
+        document.getElementById("cutSelSore").value = savedCut.sel_sore;
+        document.getElementById("cutMalam").value = savedCut.malam;
+      }
+
+      if (savedUrl) loadDatabase();
+      else toggleSettings();
+    })();
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function cleanRmKey(rm) {
+      return String(rm || "").trim().toUpperCase().replace(/^0+/, "");
+    }
+
+    function toggleSettings() {
+      document.getElementById("settingsPanel").classList.toggle("hidden");
+    }
+
+    function saveSettings() {
+      const url = document.getElementById("gasUrlInput").value.trim();
+      localStorage.setItem("pgrs_gas_url", url);
+      localStorage.setItem("pgrs_cutoffs", JSON.stringify({
+        pagi: document.getElementById("cutPagi").value,
+        sel_pagi: document.getElementById("cutSelPagi").value,
+        siang: document.getElementById("cutSiang").value,
+        sel_sore: document.getElementById("cutSelSore").value,
+        malam: document.getElementById("cutMalam").value
+      }));
+      toggleSettings();
+      if (url) loadDatabase();
+    }
+
+    async function loadDatabase() {
+      const url = document.getElementById("gasUrlInput").value.trim();
+      if (!url) return alert("Masukkan URL Web App Google Apps Script terlebih dahulu.");
+
+      const badge = document.getElementById("dbStatusBadge");
+      const btn = document.getElementById("btnLoadDb");
+      badge.textContent = "Memuat ADIME...";
+      badge.className = "px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-700";
+      btn.disabled = true;
+
+      try {
+        const resp = await fetch(url);
+        const json = await resp.json();
+        if (json.status !== "success") throw new Error(json.message || "Gagal mengambil data");
+
+        dbData.pasien = json.data.pasien || [];
+        dbData.adime = (json.data.adime || []).slice().reverse();
+        dbData.users = json.data.users || [];
+        dbData.diet = json.data.diet || [];
+
+        pasienMap = {};
+        dbData.pasien.forEach(p => {
+          const raw = String(p.no_rm || p.norm || "").trim().toUpperCase();
+          if (raw) {
+            pasienMap[raw] = p;
+            pasienMap[cleanRmKey(raw)] = p;
+          }
+        });
+
+        existingDietMap = {};
+        dietCountByRm = {};
+        if (dbData.diet.length > 0) detectedDietHeaders = Object.keys(dbData.diet[0]);
+        dbData.diet.forEach(d => {
+          const rm = cleanRmKey(d.no_rm || d.norm || "");
+          const tgl = String(d.tanggal || "").slice(0, 10);
+          if (rm && tgl) existingDietMap[rm + "_" + tgl] = d.id;
+          if (rm) dietCountByRm[rm] = (dietCountByRm[rm] || 0) + 1;
+        });
+
+        const bangsalSet = new Set();
+        dbData.adime.forEach(a => { if (a.bangsal) bangsalSet.add(a.bangsal); });
+        document.getElementById("filterAdimeBangsal").innerHTML = `<option value="">Semua Bangsal</option>` +
+          Array.from(bangsalSet).sort().map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join("");
+
+        document.getElementById("petugasDatalist").innerHTML =
+          dbData.users.map(u => `<option value="${escapeHtml(u.nama || u.username || '')}"></option>`).join("");
+
+        badge.textContent = `Terhubung (${dbData.adime.length} ADIME, ${dbData.diet.length} Diet)`;
+        badge.className = "px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-700";
+
+        renderAdimeList();
+      } catch (err) {
+        badge.textContent = "Gagal terhubung";
+        badge.className = "px-2.5 py-0.5 text-xs font-semibold rounded-full bg-rose-100 text-rose-700";
+        alert("Error koneksi: " + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // PARSER KHUSUS FORMAT ADIME ANDA (TEE = 2150 kkal, Protein = 60 gram, Terapi Diet : TKTP, Bentuk Makanan : Lunak)
+    function extractNutritionFromAdime(adimeObj) {
+      const text = String(adimeObj.intervention || adimeObj.intervensi || adimeObj.intervensi_gizi || "");
+
+      let kalori = parseFloat(adimeObj.kalori || adimeObj.tee || adimeObj.energi || 0) || 0;
+      if (!kalori) {
+        const mTee = text.match(/(?:TEE|Kalori|Energi|Kebutuhan\s*Energi)\s*[:=]\s*(\d+(?:[.,]\d+)?)/i)
+          || text.match(/(\d{3,4}(?:[.,]\d+)?)\s*kkal/i);
+        if (mTee) kalori = Math.round(parseFloat(mTee[1].replace(",", ".")));
+      }
+
+      let protein = parseFloat(adimeObj.protein || adimeObj.pro || 0) || 0;
+      if (!protein) {
+        const mPro = text.match(/(?:Protein|Pro)\s*[:=]\s*(\d+(?:[.,]\d+)?)/i)
+          || text.match(/Protein\s+(\d+(?:[.,]\d+)?)\s*(?:g|gr|gram)/i);
+        if (mPro) protein = Math.round(parseFloat(mPro[1].replace(",", ".")));
+      }
+
+      const mLemak = text.match(/Lemak\s*[:=]\s*(\d+(?:[.,]\d+)?)/i);
+      const mKh = text.match(/(?:Karbohidrat|KH)\s*[:=]\s*(\d+(?:[.,]\d+)?)/i);
+
+      // Normalisasi ke nilai baku sheet diet ('Makanan Biasa', 'Makanan Lunak', 'Makanan Saring', 'Makanan Cair')
+      let bentuk = "Makanan Biasa";
+      const mBentuk = text.match(/Bentuk\s*Makanan\s*[:=]\s*([^\n\r]+)/i);
+      const bentukSrc = (mBentuk ? mBentuk[1] : text).toLowerCase();
+      if (bentukSrc.includes("lunak") || bentukSrc.includes("bubur") || bentukSrc.includes("tim")) bentuk = "Makanan Lunak";
+      else if (bentukSrc.includes("saring") || bentukSrc.includes("halus")) bentuk = "Makanan Saring";
+      else if (bentukSrc.includes("cair") || bentukSrc.includes("susu") || bentukSrc.includes("sonde")) bentuk = "Makanan Cair";
+
+      // Normalisasi jenis diet ('TKTP' -> 'Diet TKTP', dll)
+      let jenis = "Diet Biasa / Reguler";
+      const mTerapi = text.match(/(?:Terapi\s*Diet|Preskripsi\s*Diet)\s*[:=]\s*([^\n\r]+)/i);
+      if (mTerapi) {
+        const tRaw = mTerapi[1].trim();
+        const tLow = tRaw.toLowerCase();
+        if (tLow.includes("diabetes") || tLow.includes("dm")) jenis = "Diet Diabetes Melitus";
+        else if (tLow.includes("rendah garam") || tLow.includes("rg") || tLow.includes("hipertensi")) jenis = "Diet Rendah Garam";
+        else if (tLow.includes("lambung")) jenis = "Diet Lambung";
+        else if (tLow.includes("dislipidemia") || tLow.includes("kolesterol")) jenis = "Diet Dislipidemia";
+        else if (tLow.includes("tktp")) jenis = "Diet TKTP";
+        else if (tLow.includes("biasa") || tLow.includes("reguler")) jenis = "Diet Biasa / Reguler";
+        else jenis = tLow.startsWith("diet") ? tRaw : ("Diet " + tRaw);
+      }
+
+      return {
+        kalori: kalori || 1800,
+        protein: protein || 60,
+        lemak: mLemak ? Math.round(parseFloat(mLemak[1].replace(",", "."))) : null,
+        kh: mKh ? Math.round(parseFloat(mKh[1].replace(",", "."))) : null,
+        bentuk,
+        jenis
+      };
+    }
+
+    function renderAdimeList() {
+      const q = document.getElementById("filterAdimeSearch").value.trim().toLowerCase();
+      const bFilter = document.getElementById("filterAdimeBangsal").value;
+      const dFilter = document.getElementById("filterAdimeDate").value;
+      const onlyNoDiet = document.getElementById("filterOnlyNoDiet").checked;
+
+      filteredAdime = dbData.adime.filter(a => {
+        const rawRm = String(a.no_rm || "").trim();
+        const rmKey = cleanRmKey(rawRm);
+        const p = pasienMap[rawRm.toUpperCase()] || pasienMap[rmKey] || {};
+        const tgl = String(a.tanggal || "").slice(0, 10);
+
+        if (bFilter && a.bangsal !== bFilter) return false;
+        if (dFilter && tgl !== dFilter) return false;
+        if (onlyNoDiet && (dietCountByRm[rmKey] || 0) > 0) return false;
+        if (q) {
+          const hay = `${rawRm} ${p.nama || ''} ${a.bangsal || ''} ${a.intervention || ''} ${a.diagnosis || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      document.getElementById("adimeCountLabel").textContent = `${filteredAdime.length} data`;
+      const container = document.getElementById("adimeListContainer");
+      if (filteredAdime.length === 0) {
+        container.innerHTML = `<div class="p-6 text-center text-xs text-slate-400">Tidak ada data ADIME yang cocok.</div>`;
+        return;
+      }
+
+      container.innerHTML = filteredAdime.slice(0, 150).map((a, idx) => {
+        const rawRm = String(a.no_rm || "").trim();
+        const rmKey = cleanRmKey(rawRm);
+        const p = pasienMap[rawRm.toUpperCase()] || pasienMap[rmKey] || {};
+        const parsed = extractNutritionFromAdime(a);
+        const existingCount = dietCountByRm[rmKey] || 0;
+        const activeCls = (a.id === selectedAdimeId) ? "bg-indigo-50 border-l-4 border-indigo-600" : "hover:bg-slate-50";
+        const dietBadge = existingCount > 0
+          ? `<span class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">${existingCount} hari diet</span>`
+          : `<span class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Belum ada diet</span>`;
+
+        return `
+          <button onclick="selectAdime(${idx})" class="w-full text-left p-3 transition ${activeCls}">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-bold text-xs text-slate-900 truncate">${escapeHtml(p.nama ? p.nama + ' (' + rawRm + ')' : 'RM: ' + rawRm)}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">${escapeHtml(String(a.tanggal || '').slice(0, 10))}</span>
+            </div>
+            <div class="text-[11px] text-slate-500 truncate mt-0.5">${escapeHtml(a.bangsal || '-')} • ${escapeHtml(a.kelas || '-')}</div>
+            <div class="flex flex-wrap items-center gap-1.5 mt-1.5 text-[10px] font-semibold">
+              <span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800">${parsed.kalori} kkal / P:${parsed.protein}g</span>
+              <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">${escapeHtml(parsed.jenis)}</span>
+              ${dietBadge}
+            </div>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function selectAdime(idx) {
+      const a = filteredAdime[idx];
+      if (!a) return;
+      selectedAdimeId = a.id;
+
+      const rawRm = String(a.no_rm || "").trim();
+      const rmKey = cleanRmKey(rawRm);
+      const p = pasienMap[rawRm.toUpperCase()] || pasienMap[rmKey] || {};
+      const parsed = extractNutritionFromAdime(a);
+
+      // Update kartu referensi ADIME
+      document.getElementById("refTitle").textContent = `${p.nama || 'Pasien'} — RM: ${rawRm} (Tgl ADIME: ${String(a.tanggal || '').slice(0, 10)})`;
+      document.getElementById("refIntervention").textContent = a.intervention || a.intervensi || "-";
+      document.getElementById("refDiagnosis").textContent = a.diagnosis || "-";
+      document.getElementById("refAssessment").textContent = a.assessment || "-";
+
+      const badges = [
+        `<span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold">TEE: ${parsed.kalori} kkal</span>`,
+        `<span class="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-bold">Pro: ${parsed.protein} g</span>`
+      ];
+      if (parsed.lemak) badges.push(`<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">Lemak: ${parsed.lemak} g</span>`);
+      if (parsed.kh) badges.push(`<span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">KH: ${parsed.kh} g</span>`);
+      document.getElementById("refBadges").innerHTML = badges.join("");
+
+      // Auto-fill form
+      document.getElementById("inNoRm").value = rawRm;
+      document.getElementById("inBangsal").value = a.bangsal || p.bangsal || "";
+      document.getElementById("inKelas").value = a.kelas || p.kelas || "";
+      document.getElementById("inKamar").value = a.kamar || p.kamar || "-";
+      document.getElementById("inPetugas").value = a.petugas || p.petugas || "";
+      document.getElementById("inBentuk").value = parsed.bentuk;
+      document.getElementById("inJenis").value = parsed.jenis;
+      document.getElementById("inKalori").value = parsed.kalori;
+      document.getElementById("inProtein").value = parsed.protein;
+
+      const tglAdime = String(a.tanggal || "").slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(tglAdime)) {
+        document.getElementById("startDate").value = tglAdime;
+        document.getElementById("fastStartDate").value = tglAdime;
+        document.getElementById("fastEndDate").value = tglAdime;
+      }
+
+      renderAdimeList();
+    }
+
+    function toggleFastingFields() {
+      const mode = document.getElementById("fastingMode").value;
+      const box = document.getElementById("fastingRangeBox");
+      if (mode === "tindakan" || mode === "total") box.classList.remove("hidden");
+      else box.classList.add("hidden");
+    }
+
+    function parseLocalDateTime(dateStr, timeStr) {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const [hh, mm] = (timeStr || "00:00").split(":").map(Number);
+      return new Date(y, m - 1, d, hh, mm, 0, 0);
+    }
+
+    function formatDateLocal(dt) {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, "0");
+      const d = String(dt.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
+    function generateSchedule() {
+      const noRm = document.getElementById("inNoRm").value.trim();
+      const sDate = document.getElementById("startDate").value;
+      const sTime = document.getElementById("startTime").value;
+      const eDate = document.getElementById("endDate").value;
+      const eTime = document.getElementById("endTime").value;
+
+      if (!noRm) return alert("Pilih data ADIME atau isi No. RM terlebih dahulu.");
+      if (!sDate || !eDate) return alert("Tanggal mulai dan selesai wajib diisi.");
+
+      const startDT = parseLocalDateTime(sDate, sTime);
+      const endDT = parseLocalDateTime(eDate, eTime);
+      if (endDT < startDT) return alert("Tanggal/Jam selesai tidak boleh lebih awal dari Tanggal/Jam mulai.");
+
+      const cutoffs = [
+        { key: "pagi_utama", time: document.getElementById("cutPagi").value, isSnack: false },
+        { key: "selingan_pagi", time: document.getElementById("cutSelPagi").value, isSnack: true },
+        { key: "siang_utama", time: document.getElementById("cutSiang").value, isSnack: false },
+        { key: "selingan_sore", time: document.getElementById("cutSelSore").value, isSnack: true },
+        { key: "malam_utama", time: document.getElementById("cutMalam").value, isSnack: false }
+      ];
+
+      const includeSnacks = document.getElementById("includeSnacksCheck").checked;
+      const fastingMode = document.getElementById("fastingMode").value;
+      const fStartDate = document.getElementById("fastStartDate").value;
+      const fStartTime = document.getElementById("fastStartTime").value;
+      const fEndDate = document.getElementById("fastEndDate").value;
+      const fEndTime = document.getElementById("fastEndTime").value;
+      const fastStartDT = fStartDate ? parseLocalDateTime(fStartDate, fastingMode === "total" ? "00:00" : fStartTime) : null;
+      const fastEndDT = fEndDate ? parseLocalDateTime(fEndDate, fastingMode === "total" ? "23:59" : fEndTime) : null;
+
+      previewRows = [];
+      let cursor = parseLocalDateTime(sDate, "00:00");
+      const lastDay = parseLocalDateTime(eDate, "00:00");
+      const skipExisting = document.getElementById("skipExistingCheck").checked;
+      const baseTs = Date.now();
+      let idx = 0;
+
+      while (cursor <= lastDay) {
+        const tglStr = formatDateLocal(cursor);
+        const mealFlags = {};
+
+        cutoffs.forEach(c => {
+          const mealDT = parseLocalDateTime(tglStr, c.time);
+          let active = (mealDT >= startDT && mealDT <= endDT);
+          if (c.isSnack && !includeSnacks) active = false;
+
+          if (active) {
+            if (fastingMode === "ramadhan") {
+              if (c.key === "selingan_pagi" || c.key === "siang_utama") active = false;
+            } else if ((fastingMode === "tindakan" || fastingMode === "total") && fastStartDT && fastEndDT) {
+              if (mealDT >= fastStartDT && mealDT <= fastEndDT) active = false;
+            }
+          }
+          mealFlags[c.key] = active;
+        });
+
+        const dbKey = cleanRmKey(noRm) + "_" + tglStr;
+        const existingId = existingDietMap[dbKey] || null;
+        const includeRow = !(skipExisting && existingId);
+
+        previewRows.push({
+          id: existingId || ("DIET_" + (baseTs + idx)),
+          no_rm: noRm,
+          tanggal: tglStr,
+          bentuk: document.getElementById("inBentuk").value,
+          jenis: document.getElementById("inJenis").value,
+          kalori: Number(document.getElementById("inKalori").value) || 0,
+          protein: Number(document.getElementById("inProtein").value) || 0,
+          petugas: document.getElementById("inPetugas").value || "Admin Gizi",
+          bangsal: document.getElementById("inBangsal").value || "-",
+          kelas: document.getElementById("inKelas").value || "-",
+          kamar: document.getElementById("inKamar").value || "-",
+          ...mealFlags,
+          _existingId: existingId,
+          _include: includeRow
+        });
+
+        idx++;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      renderPreviewTable();
+    }
+
+    function recalcQty(row) {
+      const qUtama = (row.pagi_utama ? 1 : 0) + (row.siang_utama ? 1 : 0) + (row.malam_utama ? 1 : 0);
+      const qSelingan = (row.selingan_pagi ? 1 : 0) + (row.selingan_sore ? 1 : 0);
+      row.qty_utama = qUtama;
+      row.qty_selingan = qSelingan > 0 ? qSelingan : "";
+    }
+
+    function renderPreviewTable() {
+      const tbody = document.getElementById("previewTableBody");
+      if (previewRows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-400">Tidak ada data.</td></tr>`;
+        updateSubmitCount();
+        return;
+      }
+
+      tbody.innerHTML = previewRows.map((r, i) => {
+        recalcQty(r);
+        const rowClass = !r._include ? "bg-slate-50 opacity-50" : "hover:bg-slate-50";
+        const statusBadge = r._existingId
+          ? `<span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">Ada di DB</span>`
+          : `<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">Baru</span>`;
+
+        return `
+          <tr class="${rowClass}">
+            <td class="p-2.5 font-semibold text-slate-800">${r.tanggal}</td>
+            <td class="p-2.5">
+              <div class="font-medium text-slate-800">${escapeHtml(r.jenis)} (${escapeHtml(r.bentuk)})</div>
+              <div class="text-[11px] text-indigo-700 font-semibold">${r.kalori} kkal • Pro ${r.protein} g</div>
+            </td>
+            <td class="p-2.5 text-center"><input type="checkbox" ${r.pagi_utama ? "checked" : ""} onchange="toggleMeal(${i}, 'pagi_utama', this.checked)"></td>
+            <td class="p-2.5 text-center"><input type="checkbox" ${r.selingan_pagi ? "checked" : ""} onchange="toggleMeal(${i}, 'selingan_pagi', this.checked)"></td>
+            <td class="p-2.5 text-center"><input type="checkbox" ${r.siang_utama ? "checked" : ""} onchange="toggleMeal(${i}, 'siang_utama', this.checked)"></td>
+            <td class="p-2.5 text-center"><input type="checkbox" ${r.selingan_sore ? "checked" : ""} onchange="toggleMeal(${i}, 'selingan_sore', this.checked)"></td>
+            <td class="p-2.5 text-center"><input type="checkbox" ${r.malam_utama ? "checked" : ""} onchange="toggleMeal(${i}, 'malam_utama', this.checked)"></td>
+            <td class="p-2.5 text-center font-bold">${r.qty_utama} / ${r.qty_selingan || 0}</td>
+            <td class="p-2.5">${statusBadge}</td>
+            <td class="p-2.5 text-center">
+              <button onclick="toggleInclude(${i})" class="text-xs underline ${r._include ? 'text-rose-600' : 'text-emerald-600'}">
+                ${r._include ? "Abaikan" : "Ikutkan"}
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      updateSubmitCount();
+    }
+
+    function toggleMeal(idx, key, val) {
+      previewRows[idx][key] = val;
+      renderPreviewTable();
+    }
+
+    function toggleInclude(idx) {
+      previewRows[idx]._include = !previewRows[idx]._include;
+      renderPreviewTable();
+    }
+
+    function updateSubmitCount() {
+      const count = previewRows.filter(r => r._include).length;
+      document.getElementById("countToSave").textContent = count;
+      document.getElementById("btnSubmitBatch").disabled = (count === 0);
+    }
+
+    async function submitBatchToDatabase() {
+      const url = document.getElementById("gasUrlInput").value.trim();
+      if (!url) return alert("URL Web App GAS belum diatur.");
+
+      const rowsToSave = previewRows.filter(r => r._include).map(r => {
+        recalcQty(r);
+        const obj = {
+          id: r.id,
+          no_rm: r.no_rm,
+          tanggal: r.tanggal,
+          bentuk: r.bentuk,
+          jenis: r.jenis,
+          kalori: r.kalori,
+          protein: r.protein,
+          qty_utama: r.qty_utama,
+          qty_selingan: r.qty_selingan,
+          petugas: r.petugas,
+          bangsal: r.bangsal,
+          kelas: r.kelas,
+          kamar: r.kamar,
+          pagi_utama: r.pagi_utama,
+          selingan_pagi: r.selingan_pagi,
+          siang_utama: r.siang_utama,
+          selingan_sore: r.selingan_sore,
+          malam_utama: r.malam_utama
+        };
+
+        if (detectedDietHeaders) {
+          detectedDietHeaders.forEach(h => {
+            const hl = h.toLowerCase().trim();
+            if (hl === "energi" || hl === "kkal") obj[h] = r.kalori;
+            if (hl === "pro" || hl === "prot") obj[h] = r.protein;
+          });
+        }
+        return obj;
+      });
+
+      if (rowsToSave.length === 0) return;
+
+      const btn = document.getElementById("btnSubmitBatch");
+      btn.disabled = true;
+      btn.textContent = "⏳ Mengirim ke Google Sheets...";
+
+      try {
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ type: "diet", action: "save", data: rowsToSave })
+        });
+
+        const resJson = await resp.json();
+        if (resJson.status === "success") {
+          alert(`✅ Berhasil menyimpan ${rowsToSave.length} baris diet ke Database Utama!`);
+          await loadDatabase();
+          previewRows = [];
+          renderPreviewTable();
+        } else {
+          throw new Error(resJson.message || "Gagal menyimpan");
+        }
+      } catch (err) {
+        alert("❌ Gagal menyimpan: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `💾 Simpan ke Google Sheets (<span id="countToSave">${previewRows.filter(r => r._include).length}</span> Baris)`;
+      }
+    }
+  </script>
+</body>
+</html>
