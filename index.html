@@ -840,8 +840,9 @@
 
     function updateSubmitCount() {
       const count = previewRows.filter(r => r._include).length;
-      document.getElementById("countToSave").textContent = count;
-      document.getElementById("btnSubmitBatch").disabled = (count === 0);
+      const btn = document.getElementById("btnSubmitBatch");
+      btn.disabled = (count === 0);
+      btn.innerHTML = `💾 Simpan ke Google Sheets (<span id="countToSave">${count}</span> Baris)`;
     }
 
     async function submitBatchToDatabase() {
@@ -887,58 +888,66 @@
       btn.disabled = true;
       btn.textContent = "⏳ Mengirim ke Google Sheets...";
 
-      let isSaved = false;
-      let errMsg = "";
-
       try {
-        const resp = await fetch(url, {
-          method: "POST",
-          redirect: "follow",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify({ type: "diet", action: "save", data: rowsToSave })
-        });
+        let isSaved = false;
+        let errMsg = "";
 
-        const rawText = await resp.text();
+        const postController = new AbortController();
+        const postTimeout = setTimeout(() => postController.abort(), 25000); // Timeout 25 detik
+
         try {
-          const resJson = JSON.parse(rawText);
-          if (resJson.status === "success") {
-            isSaved = true;
-          } else {
-            errMsg = resJson.message || "Respon server bukan success";
+          const resp = await fetch(url, {
+            method: "POST",
+            redirect: "follow",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ type: "diet", action: "save", data: rowsToSave }),
+            signal: postController.signal
+          });
+          clearTimeout(postTimeout);
+
+          const rawText = await resp.text();
+          try {
+            const resJson = JSON.parse(rawText);
+            if (resJson.status === "success") {
+              isSaved = true;
+            } else {
+              errMsg = resJson.message || "Respon server bukan success";
+            }
+          } catch (parseErr) {
+            errMsg = "Respon redirect tidak terbaca JSON";
           }
-        } catch (parseErr) {
-          // Jika GAS membalas HTML redirect tapi status HTTP OK, cek ulang database di bawah
-          errMsg = "Respon redirect tidak terbaca JSON";
+        } catch (err) {
+          clearTimeout(postTimeout);
+          errMsg = (err.name === "AbortError") ? "Koneksi POST timeout > 25 detik" : err.message;
         }
-      } catch (err) {
-        errMsg = err.message;
-      }
 
-      // VERIFIKASI OTOMATIS: Jika kena blokir redirect CORS GAS, cek apakah ID sudah masuk di sheet diet
-      if (!isSaved) {
-        btn.textContent = "🔍 Memverifikasi ke database...";
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        await loadDatabase();
+        // VERIFIKASI OTOMATIS: Jika kena blokir redirect / timeout, cek apakah ID sudah masuk di sheet diet
+        if (!isSaved) {
+          btn.textContent = "🔍 Memverifikasi ke database...";
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          await loadDatabase();
 
-        const targetIds = new Set(rowsToSave.map(r => String(r.id).trim().toUpperCase()));
-        const foundInDb = dbData.diet.some(d => targetIds.has(String(d.id || "").trim().toUpperCase()));
-        if (foundInDb) {
-          isSaved = true;
+          const targetIds = new Set(rowsToSave.map(r => String(r.id).trim().toUpperCase()));
+          const foundInDb = dbData.diet.some(d => targetIds.has(String(d.id || "").trim().toUpperCase()));
+          if (foundInDb) {
+            isSaved = true;
+          }
+        } else {
+          btn.textContent = "🔄 Menyegarkan data...";
+          await loadDatabase();
         }
-      } else {
-        await loadDatabase();
-      }
 
-      if (isSaved) {
-        alert(`✅ Berhasil menyimpan ${rowsToSave.length} baris diet ke Database Utama!`);
-        previewRows = [];
-        renderPreviewTable();
-      } else {
-        alert("❌ Gagal menyimpan: " + (errMsg || "Tidak terverifikasi di database"));
+        if (isSaved) {
+          alert(`✅ Berhasil menyimpan ${rowsToSave.length} baris diet ke Database Utama! Silakan pilih pasien berikutnya.`);
+          previewRows = [];
+          renderPreviewTable();
+        } else {
+          alert("❌ Gagal menyimpan: " + (errMsg || "Tidak terverifikasi di database"));
+        }
+      } finally {
+        // DIJAMIN selalu mengembalikan tombol ke keadaan normal tanpa perlu refresh halaman
+        updateSubmitCount();
       }
-
-     btn.disabled = false;
-      btn.innerHTML = `💾 Simpan ke Google Sheets (<span id="countToSave">${previewRows.filter(r => r._include).length}</span> Baris)`;
     }
   </script>
 </body>
